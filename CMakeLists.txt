@@ -10,23 +10,51 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-# 查找tinyxml2
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-    pkg_check_modules(TINYXML2 tinyxml2)
-endif()
-
-if(NOT TINYXML2_FOUND)
-    # 如果没有找到系统安装的tinyxml2，尝试使用FetchContent
-    include(FetchContent)
-    FetchContent_Declare(
-        tinyxml2
-        GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
-        GIT_TAG 9.0.0
-    )
-    FetchContent_MakeAvailable(tinyxml2)
+# 查找tinyxml2 - 优先使用系统安装的版本
+find_package(tinyxml2 QUIET)
+if(tinyxml2_FOUND)
+    message(STATUS "Found system tinyxml2")
     set(TINYXML2_LIBRARIES tinyxml2::tinyxml2)
-    set(TINYXML2_INCLUDE_DIRS ${tinyxml2_SOURCE_DIR})
+    set(TINYXML2_INCLUDE_DIRS "")
+else()
+    # 尝试使用pkg-config
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(TINYXML2 tinyxml2)
+    endif()
+    
+    # 如果仍然没有找到，尝试手动下载
+    if(NOT TINYXML2_FOUND)
+        message(STATUS "tinyxml2 not found, attempting to download...")
+        include(FetchContent)
+        
+        # 设置网络选项
+        set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+        set(FETCHCONTENT_QUIET OFF)
+        
+        # 尝试使用URL下载
+        FetchContent_Declare(
+            tinyxml2
+            URL https://github.com/leethomason/tinyxml2/archive/refs/tags/9.0.0.tar.gz
+            URL_HASH SHA256=cc2f1417c308b1f6acc54f88eb70771a0bf65f76282ce5c40e54cfe52952702c
+        )
+        
+        FetchContent_GetProperties(tinyxml2)
+        if(NOT tinyxml2_POPULATED)
+            FetchContent_Populate(tinyxml2)
+        endif()
+        
+        if(tinyxml2_POPULATED)
+            set(TINYXML2_LIBRARIES tinyxml2)
+            set(TINYXML2_INCLUDE_DIRS ${tinyxml2_SOURCE_DIR})
+            add_subdirectory(${tinyxml2_SOURCE_DIR} ${tinyxml2_BINARY_DIR})
+        else()
+            message(FATAL_ERROR "Failed to download tinyxml2. Please install it manually:")
+            message(STATUS "1. vcpkg install tinyxml2")
+            message(STATUS "2. Download from https://github.com/leethomason/tinyxml2")
+            message(STATUS "3. Set TINYXML2_DIR to point to tinyxml2 installation")
+        endif()
+    endif()
 endif()
 
 # 创建动态库

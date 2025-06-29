@@ -80,6 +80,9 @@ struct EXML_PARSER_API LayoutConfig {
     std::string viewTypeAppOrder;
     
     LayoutConfig();
+    ~LayoutConfig();
+    LayoutConfig(const LayoutConfig& other);
+    LayoutConfig& operator=(const LayoutConfig& other);
 };
 
 /**

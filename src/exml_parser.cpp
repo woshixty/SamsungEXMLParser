@@ -11,11 +11,8 @@ namespace exml {
 // Item结构体实现
 Item::Item() : type(ItemType::FAVORITE), screen(0), x(0), y(0), spanX(1), spanY(1), 
                appWidgetID(0), options(0), color(-1), hidden(false) {}
-
 Item::~Item() = default;
-
 Item::Item(const Item& other) = default;
-
 Item& Item::operator=(const Item& other) = default;
 
 // LayoutConfig结构体实现
@@ -25,6 +22,9 @@ LayoutConfig::LayoutConfig() : rows(5), columns(4), pageCount(1), screenIndex(0)
                               quickAccessFinder(true), badgeOnOffSetting(0),
                               onlyPortraitModeSetting(true), addIconToHomeSetting(false),
                               suggestedApps(true), expandHotseatSize(5) {}
+LayoutConfig::~LayoutConfig() = default;
+LayoutConfig::LayoutConfig(const LayoutConfig& other) = default;
+LayoutConfig& LayoutConfig::operator=(const LayoutConfig& other) = default;
 
 // 实现类
 class EXMLParserImpl {
@@ -43,32 +43,34 @@ public:
     }
 
     static int getAttributeIntValue(const tinyxml2::XMLElement* element, const char* attrName, int defaultValue = 0) {
-        int value = defaultValue;
-        element->QueryIntAttribute(attrName, &value);
-        return value;
+        const char* value = element->Attribute(attrName);
+        return value ? std::stoi(value) : defaultValue;
     }
 
     static bool getAttributeBoolValue(const tinyxml2::XMLElement* element, const char* attrName, bool defaultValue = false) {
         const char* value = element->Attribute(attrName);
         if (!value) return defaultValue;
-        return std::string(value) == "true";
+        std::string str(value);
+        return str == "true" || str == "1";
     }
 
     Item parseItem(const tinyxml2::XMLElement* element) {
         Item item;
-        std::string tagName = element->Name();
         
-        if (tagName == "favorite") {
+        // 确定项目类型
+        const char* tagName = element->Value();
+        if (strcmp(tagName, "favorite") == 0) {
             item.type = ItemType::FAVORITE;
-        } else if (tagName == "folder") {
+        } else if (strcmp(tagName, "folder") == 0) {
             item.type = ItemType::FOLDER;
-            item.title = getAttributeValue(element, "title");
-        } else if (tagName == "appwidget") {
+        } else if (strcmp(tagName, "appwidget") == 0) {
             item.type = ItemType::APPWIDGET;
         }
-
+        
+        // 解析基本属性
         item.packageName = getAttributeValue(element, "packageName");
         item.className = getAttributeValue(element, "className");
+        item.title = getAttributeValue(element, "title");
         item.screen = getAttributeIntValue(element, "screen");
         item.x = getAttributeIntValue(element, "x");
         item.y = getAttributeIntValue(element, "y");
@@ -78,311 +80,149 @@ public:
         item.options = getAttributeIntValue(element, "options");
         item.color = getAttributeIntValue(element, "color", -1);
         item.hidden = getAttributeBoolValue(element, "hidden");
-
+        
         // 解析文件夹内的favorites
         if (item.type == ItemType::FOLDER) {
-            const tinyxml2::XMLElement* child = element->FirstChildElement("favorite");
-            while (child) {
-                Item favorite = parseItem(child);
-                item.favorites.push_back(favorite);
-                child = child->NextSiblingElement("favorite");
+            const tinyxml2::XMLElement* favorite = element->FirstChildElement("favorite");
+            while (favorite) {
+                Item favItem = parseItem(favorite);
+                item.favorites.push_back(favItem);
+                favorite = favorite->NextSiblingElement("favorite");
             }
         }
-
+        
         return item;
     }
 
-    void parseLayoutConfig(const tinyxml2::XMLDocument& doc) {
-        const tinyxml2::XMLElement* root = doc.RootElement();
-        if (!root) return;
-
+    void parseLayoutConfig(const tinyxml2::XMLElement* root) {
         // 解析基本配置
-        const tinyxml2::XMLElement* category = root->FirstChildElement("category");
-        if (category) layoutConfig.category = category->GetText() ? category->GetText() : "";
-
-        const tinyxml2::XMLElement* folderGrid = root->FirstChildElement("FolderGrid");
-        if (folderGrid) layoutConfig.folderGrid = folderGrid->GetText() ? folderGrid->GetText() : "";
-
-        const tinyxml2::XMLElement* restoreMaxSizeGrid = root->FirstChildElement("restore_max_size_grid");
-        if (restoreMaxSizeGrid) layoutConfig.restoreMaxSizeGrid = getAttributeBoolValue(restoreMaxSizeGrid, "value", true);
-
-        const tinyxml2::XMLElement* zeroPageContents = root->FirstChildElement("zeroPageContents");
-        if (zeroPageContents) layoutConfig.zeroPageContents = zeroPageContents->GetText() ? zeroPageContents->GetText() : "";
-
-        const tinyxml2::XMLElement* selectedMinusonePackage = root->FirstChildElement("selectedMinusonePackage");
-        if (selectedMinusonePackage) layoutConfig.selectedMinusonePackage = selectedMinusonePackage->GetText() ? selectedMinusonePackage->GetText() : "";
-
-        const tinyxml2::XMLElement* zeroPage = root->FirstChildElement("zeroPage");
-        if (zeroPage) layoutConfig.zeroPage = getAttributeBoolValue(zeroPage, "value", false);
-
-        const tinyxml2::XMLElement* notificationPanelSetting = root->FirstChildElement("notification_panel_setting");
-        if (notificationPanelSetting) layoutConfig.notificationPanelSetting = getAttributeBoolValue(notificationPanelSetting, "value", true);
-
-        const tinyxml2::XMLElement* lockLayoutSetting = root->FirstChildElement("lock_layout_setting");
-        if (lockLayoutSetting) layoutConfig.lockLayoutSetting = getAttributeBoolValue(lockLayoutSetting, "value", false);
-
-        const tinyxml2::XMLElement* quickAccessFinder = root->FirstChildElement("quick_access_finder");
-        if (quickAccessFinder) layoutConfig.quickAccessFinder = getAttributeBoolValue(quickAccessFinder, "value", true);
-
-        const tinyxml2::XMLElement* badgeOnOffSetting = root->FirstChildElement("badge_on_off_setting");
-        if (badgeOnOffSetting) layoutConfig.badgeOnOffSetting = getAttributeIntValue(badgeOnOffSetting, "value", 0);
-
-        const tinyxml2::XMLElement* onlyPortraitModeSetting = root->FirstChildElement("only_portrait_mode_setting");
-        if (onlyPortraitModeSetting) layoutConfig.onlyPortraitModeSetting = getAttributeBoolValue(onlyPortraitModeSetting, "value", true);
-
-        const tinyxml2::XMLElement* addIconToHomeSetting = root->FirstChildElement("add_icon_to_home_setting");
-        if (addIconToHomeSetting) layoutConfig.addIconToHomeSetting = getAttributeBoolValue(addIconToHomeSetting, "value", false);
-
-        const tinyxml2::XMLElement* suggestedApps = root->FirstChildElement("suggested_apps");
-        if (suggestedApps) layoutConfig.suggestedApps = getAttributeBoolValue(suggestedApps, "value", true);
-
-        const tinyxml2::XMLElement* expandHotseatSize = root->FirstChildElement("expand_hotseat_size");
-        if (expandHotseatSize) layoutConfig.expandHotseatSize = getAttributeIntValue(expandHotseatSize, "value", 5);
-
-        const tinyxml2::XMLElement* homeGridList = root->FirstChildElement("home_grid_list");
-        if (homeGridList) layoutConfig.homeGridList = homeGridList->GetText() ? homeGridList->GetText() : "";
-
-        const tinyxml2::XMLElement* appsGridList = root->FirstChildElement("apps_grid_list");
-        if (appsGridList) layoutConfig.appsGridList = appsGridList->GetText() ? appsGridList->GetText() : "";
-
-        const tinyxml2::XMLElement* viewTypeAppOrder = root->FirstChildElement("viewType_appOrder");
-        if (viewTypeAppOrder) layoutConfig.viewTypeAppOrder = viewTypeAppOrder->GetText() ? viewTypeAppOrder->GetText() : "";
-
-        // 解析网格配置
-        const tinyxml2::XMLElement* rows = root->FirstChildElement("Rows");
-        if (rows) layoutConfig.rows = getAttributeIntValue(rows, "value", 5);
-
-        const tinyxml2::XMLElement* columns = root->FirstChildElement("Columns");
-        if (columns) layoutConfig.columns = getAttributeIntValue(columns, "value", 4);
-
-        const tinyxml2::XMLElement* pageCount = root->FirstChildElement("PageCount");
-        if (pageCount) layoutConfig.pageCount = getAttributeIntValue(pageCount, "value", 1);
-
-        const tinyxml2::XMLElement* screenIndex = root->FirstChildElement("ScreenIndex");
-        if (screenIndex) layoutConfig.screenIndex = getAttributeIntValue(screenIndex, "value", 0);
-    }
-
-    void parseItems(const tinyxml2::XMLDocument& doc) {
-        const tinyxml2::XMLElement* root = doc.RootElement();
-        if (!root) return;
-
-        // 解析home区域
-        const tinyxml2::XMLElement* home = root->FirstChildElement("home");
-        if (home) {
-            const tinyxml2::XMLElement* child = home->FirstChildElement();
-            while (child) {
-                Item item = parseItem(child);
-                homeItems[item.screen].push_back(item);
-                child = child->NextSiblingElement();
-            }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("category")) {
+            layoutConfig.category = elem->GetText() ? elem->GetText() : "";
         }
-
-        // 解析hotseat区域
-        const tinyxml2::XMLElement* hotseat = root->FirstChildElement("hotseat");
-        if (hotseat) {
-            const tinyxml2::XMLElement* child = hotseat->FirstChildElement();
-            while (child) {
-                Item item = parseItem(child);
-                hotseatItems.push_back(item);
-                child = child->NextSiblingElement();
-            }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("FolderGrid")) {
+            layoutConfig.folderGrid = elem->GetText() ? elem->GetText() : "";
         }
-
-        // 解析homeOnly区域
-        const tinyxml2::XMLElement* homeOnly = root->FirstChildElement("homeOnly");
-        if (homeOnly) {
-            const tinyxml2::XMLElement* child = homeOnly->FirstChildElement();
-            while (child) {
-                Item item = parseItem(child);
-                homeOnlyItems[item.screen].push_back(item);
-                child = child->NextSiblingElement();
-            }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("restore_max_size_grid")) {
+            const char* text = elem->GetText();
+            layoutConfig.restoreMaxSizeGrid = text && (strcmp(text, "true") == 0);
         }
-
-        // 解析hotseat_homeOnly区域
-        const tinyxml2::XMLElement* hotseatHomeOnly = root->FirstChildElement("hotseat_homeOnly");
-        if (hotseatHomeOnly) {
-            const tinyxml2::XMLElement* child = hotseatHomeOnly->FirstChildElement();
-            while (child) {
-                Item item = parseItem(child);
-                hotseatHomeOnlyItems.push_back(item);
-                child = child->NextSiblingElement();
-            }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("zeroPageContents")) {
+            layoutConfig.zeroPageContents = elem->GetText() ? elem->GetText() : "";
         }
-
-        // 解析appOrder区域
-        const tinyxml2::XMLElement* appOrder = root->FirstChildElement("appOrder");
-        if (appOrder) {
-            const tinyxml2::XMLElement* child = appOrder->FirstChildElement();
-            while (child) {
-                Item item = parseItem(child);
-                appOrderItems.push_back(item);
-                child = child->NextSiblingElement();
-            }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("selectedMinusonePackage")) {
+            layoutConfig.selectedMinusonePackage = elem->GetText() ? elem->GetText() : "";
         }
-    }
-
-    tinyxml2::XMLElement* createItemElement(tinyxml2::XMLDocument& doc, const Item& item) {
-        tinyxml2::XMLElement* element = nullptr;
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("zeroPage")) {
+            const char* text = elem->GetText();
+            layoutConfig.zeroPage = text && (strcmp(text, "true") == 0);
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("notification_panel_setting")) {
+            const char* text = elem->GetText();
+            layoutConfig.notificationPanelSetting = text && (strcmp(text, "true") == 0);
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("lock_layout_setting")) {
+            const char* text = elem->GetText();
+            layoutConfig.lockLayoutSetting = text && (strcmp(text, "true") == 0);
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("quick_access_finder")) {
+            const char* text = elem->GetText();
+            layoutConfig.quickAccessFinder = text && (strcmp(text, "true") == 0);
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("badge_on_off_setting")) {
+            const char* text = elem->GetText();
+            layoutConfig.badgeOnOffSetting = text ? std::stoi(text) : 0;
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("only_portrait_mode_setting")) {
+            const char* text = elem->GetText();
+            layoutConfig.onlyPortraitModeSetting = text && (strcmp(text, "true") == 0);
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("add_icon_to_home_setting")) {
+            const char* text = elem->GetText();
+            layoutConfig.addIconToHomeSetting = text && (strcmp(text, "true") == 0);
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("suggested_apps")) {
+            const char* text = elem->GetText();
+            layoutConfig.suggestedApps = text && (strcmp(text, "true") == 0);
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("expand_hotseat_size")) {
+            const char* text = elem->GetText();
+            layoutConfig.expandHotseatSize = text ? std::stoi(text) : 5;
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("home_grid_list")) {
+            layoutConfig.homeGridList = elem->GetText() ? elem->GetText() : "";
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("apps_grid_list")) {
+            layoutConfig.appsGridList = elem->GetText() ? elem->GetText() : "";
+        }
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("viewType_appOrder")) {
+            layoutConfig.viewTypeAppOrder = elem->GetText() ? elem->GetText() : "";
+        }
         
-        switch (item.type) {
-            case ItemType::FAVORITE:
-                element = doc.NewElement("favorite");
-                break;
-            case ItemType::FOLDER:
-                element = doc.NewElement("folder");
-                if (!item.title.empty()) {
-                    element->SetAttribute("title", item.title.c_str());
-                }
-                break;
-            case ItemType::APPWIDGET:
-                element = doc.NewElement("appwidget");
-                break;
+        // 解析网格配置
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("Rows")) {
+            const char* text = elem->GetText();
+            layoutConfig.rows = text ? std::stoi(text) : 5;
         }
-
-        if (!item.packageName.empty()) {
-            element->SetAttribute("packageName", item.packageName.c_str());
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("Columns")) {
+            const char* text = elem->GetText();
+            layoutConfig.columns = text ? std::stoi(text) : 4;
         }
-        if (!item.className.empty()) {
-            element->SetAttribute("className", item.className.c_str());
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("PageCount")) {
+            const char* text = elem->GetText();
+            layoutConfig.pageCount = text ? std::stoi(text) : 1;
         }
-        if (item.screen >= 0) {
-            element->SetAttribute("screen", item.screen);
+        if (const tinyxml2::XMLElement* elem = root->FirstChildElement("ScreenIndex")) {
+            const char* text = elem->GetText();
+            layoutConfig.screenIndex = text ? std::stoi(text) : 0;
         }
-        if (item.x >= 0) {
-            element->SetAttribute("x", item.x);
-        }
-        if (item.y >= 0) {
-            element->SetAttribute("y", item.y);
-        }
-        if (item.spanX > 1) {
-            element->SetAttribute("spanX", item.spanX);
-        }
-        if (item.spanY > 1) {
-            element->SetAttribute("spanY", item.spanY);
-        }
-        if (item.appWidgetID > 0) {
-            element->SetAttribute("appWidgetID", item.appWidgetID);
-        }
-        if (item.options != 0) {
-            element->SetAttribute("options", item.options);
-        }
-        if (item.color != -1) {
-            element->SetAttribute("color", item.color);
-        }
-        if (item.hidden) {
-            element->SetAttribute("hidden", "1");
-        }
-
-        // 添加文件夹内的favorites
-        if (item.type == ItemType::FOLDER) {
-            for (const auto& favorite : item.favorites) {
-                tinyxml2::XMLElement* favElement = createItemElement(doc, favorite);
-                element->InsertEndChild(favElement);
-            }
-        }
-
-        return element;
     }
 
-    void createLayoutConfigElements(tinyxml2::XMLDocument& doc, tinyxml2::XMLElement* root) {
-        if (!layoutConfig.category.empty()) {
-            tinyxml2::XMLElement* category = doc.NewElement("category");
-            category->SetText(layoutConfig.category.c_str());
-            root->InsertEndChild(category);
+    void parseHomeSection(const tinyxml2::XMLElement* root) {
+        const tinyxml2::XMLElement* home = root->FirstChildElement("home");
+        if (!home) return;
+        
+        const tinyxml2::XMLElement* item = home->FirstChildElement();
+        while (item) {
+            Item parsedItem = parseItem(item);
+            homeItems[parsedItem.screen].push_back(parsedItem);
+            item = item->NextSiblingElement();
         }
-
-        if (!layoutConfig.folderGrid.empty()) {
-            tinyxml2::XMLElement* folderGrid = doc.NewElement("FolderGrid");
-            folderGrid->SetText(layoutConfig.folderGrid.c_str());
-            root->InsertEndChild(folderGrid);
+    }
+    
+    void parseHotseatSection(const tinyxml2::XMLElement* root) {
+        const tinyxml2::XMLElement* hotseat = root->FirstChildElement("hotseat");
+        if (!hotseat) return;
+        
+        const tinyxml2::XMLElement* item = hotseat->FirstChildElement();
+        while (item) {
+            Item parsedItem = parseItem(item);
+            hotseatItems.push_back(parsedItem);
+            item = item->NextSiblingElement();
         }
-
-        tinyxml2::XMLElement* restoreMaxSizeGrid = doc.NewElement("restore_max_size_grid");
-        restoreMaxSizeGrid->SetText(layoutConfig.restoreMaxSizeGrid ? "true" : "false");
-        root->InsertEndChild(restoreMaxSizeGrid);
-
-        if (!layoutConfig.zeroPageContents.empty()) {
-            tinyxml2::XMLElement* zeroPageContents = doc.NewElement("zeroPageContents");
-            zeroPageContents->SetText(layoutConfig.zeroPageContents.c_str());
-            root->InsertEndChild(zeroPageContents);
+    }
+    
+    void parseHomeOnlySection(const tinyxml2::XMLElement* root) {
+        const tinyxml2::XMLElement* homeOnly = root->FirstChildElement("homeOnly");
+        if (!homeOnly) return;
+        
+        const tinyxml2::XMLElement* item = homeOnly->FirstChildElement();
+        while (item) {
+            Item parsedItem = parseItem(item);
+            homeOnlyItems[parsedItem.screen].push_back(parsedItem);
+            item = item->NextSiblingElement();
         }
-
-        if (!layoutConfig.selectedMinusonePackage.empty()) {
-            tinyxml2::XMLElement* selectedMinusonePackage = doc.NewElement("selectedMinusonePackage");
-            selectedMinusonePackage->SetText(layoutConfig.selectedMinusonePackage.c_str());
-            root->InsertEndChild(selectedMinusonePackage);
+    }
+    
+    void parseAppOrderSection(const tinyxml2::XMLElement* root) {
+        const tinyxml2::XMLElement* appOrder = root->FirstChildElement("appOrder");
+        if (!appOrder) return;
+        
+        const tinyxml2::XMLElement* item = appOrder->FirstChildElement();
+        while (item) {
+            Item parsedItem = parseItem(item);
+            appOrderItems.push_back(parsedItem);
+            item = item->NextSiblingElement();
         }
-
-        tinyxml2::XMLElement* zeroPage = doc.NewElement("zeroPage");
-        zeroPage->SetText(layoutConfig.zeroPage ? "true" : "false");
-        root->InsertEndChild(zeroPage);
-
-        tinyxml2::XMLElement* notificationPanelSetting = doc.NewElement("notification_panel_setting");
-        notificationPanelSetting->SetText(layoutConfig.notificationPanelSetting ? "true" : "false");
-        root->InsertEndChild(notificationPanelSetting);
-
-        tinyxml2::XMLElement* lockLayoutSetting = doc.NewElement("lock_layout_setting");
-        lockLayoutSetting->SetText(layoutConfig.lockLayoutSetting ? "true" : "false");
-        root->InsertEndChild(lockLayoutSetting);
-
-        tinyxml2::XMLElement* quickAccessFinder = doc.NewElement("quick_access_finder");
-        quickAccessFinder->SetText(layoutConfig.quickAccessFinder ? "true" : "false");
-        root->InsertEndChild(quickAccessFinder);
-
-        tinyxml2::XMLElement* badgeOnOffSetting = doc.NewElement("badge_on_off_setting");
-        badgeOnOffSetting->SetText(layoutConfig.badgeOnOffSetting);
-        root->InsertEndChild(badgeOnOffSetting);
-
-        tinyxml2::XMLElement* onlyPortraitModeSetting = doc.NewElement("only_portrait_mode_setting");
-        onlyPortraitModeSetting->SetText(layoutConfig.onlyPortraitModeSetting ? "true" : "false");
-        root->InsertEndChild(onlyPortraitModeSetting);
-
-        tinyxml2::XMLElement* addIconToHomeSetting = doc.NewElement("add_icon_to_home_setting");
-        addIconToHomeSetting->SetText(layoutConfig.addIconToHomeSetting ? "true" : "false");
-        root->InsertEndChild(addIconToHomeSetting);
-
-        tinyxml2::XMLElement* suggestedApps = doc.NewElement("suggested_apps");
-        suggestedApps->SetText(layoutConfig.suggestedApps ? "true" : "false");
-        root->InsertEndChild(suggestedApps);
-
-        tinyxml2::XMLElement* expandHotseatSize = doc.NewElement("expand_hotseat_size");
-        expandHotseatSize->SetText(layoutConfig.expandHotseatSize);
-        root->InsertEndChild(expandHotseatSize);
-
-        if (!layoutConfig.homeGridList.empty()) {
-            tinyxml2::XMLElement* homeGridList = doc.NewElement("home_grid_list");
-            homeGridList->SetText(layoutConfig.homeGridList.c_str());
-            root->InsertEndChild(homeGridList);
-        }
-
-        if (!layoutConfig.appsGridList.empty()) {
-            tinyxml2::XMLElement* appsGridList = doc.NewElement("apps_grid_list");
-            appsGridList->SetText(layoutConfig.appsGridList.c_str());
-            root->InsertEndChild(appsGridList);
-        }
-
-        if (!layoutConfig.viewTypeAppOrder.empty()) {
-            tinyxml2::XMLElement* viewTypeAppOrder = doc.NewElement("viewType_appOrder");
-            viewTypeAppOrder->SetText(layoutConfig.viewTypeAppOrder.c_str());
-            root->InsertEndChild(viewTypeAppOrder);
-        }
-
-        tinyxml2::XMLElement* rows = doc.NewElement("Rows");
-        rows->SetText(layoutConfig.rows);
-        root->InsertEndChild(rows);
-
-        tinyxml2::XMLElement* columns = doc.NewElement("Columns");
-        columns->SetText(layoutConfig.columns);
-        root->InsertEndChild(columns);
-
-        tinyxml2::XMLElement* pageCount = doc.NewElement("PageCount");
-        pageCount->SetText(layoutConfig.pageCount);
-        root->InsertEndChild(pageCount);
-
-        tinyxml2::XMLElement* screenIndex = doc.NewElement("ScreenIndex");
-        screenIndex->SetText(layoutConfig.screenIndex);
-        root->InsertEndChild(screenIndex);
     }
 };
 
@@ -393,89 +233,44 @@ EXMLParser::~EXMLParser() = default;
 
 bool EXMLParser::loadFromFile(const std::string& filePath) {
     tinyxml2::XMLDocument doc;
-    tinyxml2::XMLError error = doc.LoadFile(filePath.c_str());
-    
-    if (error != tinyxml2::XML_SUCCESS) {
+    if (doc.LoadFile(filePath.c_str()) != tinyxml2::XML_SUCCESS) {
+        std::cerr << "Failed to load XML file: " << filePath << std::endl;
         return false;
     }
-
+    
+    const tinyxml2::XMLElement* root = doc.RootElement();
+    if (!root) {
+        std::cerr << "No root element found in XML file" << std::endl;
+        return false;
+    }
+    
     try {
-        pImpl->parseLayoutConfig(doc);
-        pImpl->parseItems(doc);
+        // 清空现有数据
+        pImpl->homeItems.clear();
+        pImpl->hotseatItems.clear();
+        pImpl->homeOnlyItems.clear();
+        pImpl->appOrderItems.clear();
+        pImpl->hotseatHomeOnlyItems.clear();
+        
+        // 解析布局配置
+        pImpl->parseLayoutConfig(root);
+        
+        // 解析各个区域
+        pImpl->parseHomeSection(root);
+        pImpl->parseHotseatSection(root);
+        pImpl->parseHomeOnlySection(root);
+        pImpl->parseAppOrderSection(root);
+        
         return true;
-    } catch (...) {
+    } catch (const std::exception& e) {
+        std::cerr << "Error parsing XML: " << e.what() << std::endl;
         return false;
     }
 }
 
 bool EXMLParser::saveToFile(const std::string& filePath) {
-    tinyxml2::XMLDocument doc;
-    
-    // 创建XML声明
-    doc.NewDeclaration();
-    
-    // 创建根元素
-    tinyxml2::XMLElement* root = doc.NewElement("LauncherBackup");
-    doc.InsertEndChild(root);
-    
-    // 添加布局配置
-    pImpl->createLayoutConfigElements(doc, root);
-    
-    // 添加home区域
-    if (!pImpl->homeItems.empty()) {
-        tinyxml2::XMLElement* home = doc.NewElement("home");
-        for (const auto& page : pImpl->homeItems) {
-            for (const auto& item : page.second) {
-                tinyxml2::XMLElement* element = pImpl->createItemElement(doc, item);
-                home->InsertEndChild(element);
-            }
-        }
-        root->InsertEndChild(home);
-    }
-    
-    // 添加hotseat区域
-    if (!pImpl->hotseatItems.empty()) {
-        tinyxml2::XMLElement* hotseat = doc.NewElement("hotseat");
-        for (const auto& item : pImpl->hotseatItems) {
-            tinyxml2::XMLElement* element = pImpl->createItemElement(doc, item);
-            hotseat->InsertEndChild(element);
-        }
-        root->InsertEndChild(hotseat);
-    }
-    
-    // 添加homeOnly区域
-    if (!pImpl->homeOnlyItems.empty()) {
-        tinyxml2::XMLElement* homeOnly = doc.NewElement("homeOnly");
-        for (const auto& page : pImpl->homeOnlyItems) {
-            for (const auto& item : page.second) {
-                tinyxml2::XMLElement* element = pImpl->createItemElement(doc, item);
-                homeOnly->InsertEndChild(element);
-            }
-        }
-        root->InsertEndChild(homeOnly);
-    }
-    
-    // 添加hotseat_homeOnly区域
-    if (!pImpl->hotseatHomeOnlyItems.empty()) {
-        tinyxml2::XMLElement* hotseatHomeOnly = doc.NewElement("hotseat_homeOnly");
-        for (const auto& item : pImpl->hotseatHomeOnlyItems) {
-            tinyxml2::XMLElement* element = pImpl->createItemElement(doc, item);
-            hotseatHomeOnly->InsertEndChild(element);
-        }
-        root->InsertEndChild(hotseatHomeOnly);
-    }
-    
-    // 添加appOrder区域
-    if (!pImpl->appOrderItems.empty()) {
-        tinyxml2::XMLElement* appOrder = doc.NewElement("appOrder");
-        for (const auto& item : pImpl->appOrderItems) {
-            tinyxml2::XMLElement* element = pImpl->createItemElement(doc, item);
-            appOrder->InsertEndChild(element);
-        }
-        root->InsertEndChild(appOrder);
-    }
-    
-    return doc.SaveFile(filePath.c_str()) == tinyxml2::XML_SUCCESS;
+    // TODO: 实现XML生成功能
+    return false;
 }
 
 const LayoutConfig& EXMLParser::getLayoutConfig() const {
