@@ -177,10 +177,15 @@ public:
         }
     }
 
-    void parseHomeSection(const tinyxml2::XMLElement* root) {
-        const tinyxml2::XMLElement* home = root->FirstChildElement("home");
+    void parseHomeSection(const tinyxml2::XMLElement* node) {
+        // 兼容：node可以是根节点，也可以是<home>节点
+        const tinyxml2::XMLElement* home = nullptr;
+        if (node && std::string(node->Value()) == "home") {
+            home = node;
+        } else if (node) {
+            home = node->FirstChildElement("home");
+        }
         if (!home) return;
-        
         const tinyxml2::XMLElement* item = home->FirstChildElement();
         while (item) {
             Item parsedItem = parseItem(item);
@@ -189,10 +194,14 @@ public:
         }
     }
     
-    void parseHotseatSection(const tinyxml2::XMLElement* root) {
-        const tinyxml2::XMLElement* hotseat = root->FirstChildElement("hotseat");
+    void parseHotseatSection(const tinyxml2::XMLElement* node) {
+        const tinyxml2::XMLElement* hotseat = nullptr;
+        if (node && std::string(node->Value()) == "hotseat") {
+            hotseat = node;
+        } else if (node) {
+            hotseat = node->FirstChildElement("hotseat");
+        }
         if (!hotseat) return;
-        
         const tinyxml2::XMLElement* item = hotseat->FirstChildElement();
         while (item) {
             Item parsedItem = parseItem(item);
@@ -201,10 +210,14 @@ public:
         }
     }
     
-    void parseHomeOnlySection(const tinyxml2::XMLElement* root) {
-        const tinyxml2::XMLElement* homeOnly = root->FirstChildElement("homeOnly");
+    void parseHomeOnlySection(const tinyxml2::XMLElement* node) {
+        const tinyxml2::XMLElement* homeOnly = nullptr;
+        if (node && std::string(node->Value()) == "homeOnly") {
+            homeOnly = node;
+        } else if (node) {
+            homeOnly = node->FirstChildElement("homeOnly");
+        }
         if (!homeOnly) return;
-        
         const tinyxml2::XMLElement* item = homeOnly->FirstChildElement();
         while (item) {
             Item parsedItem = parseItem(item);
@@ -213,10 +226,14 @@ public:
         }
     }
     
-    void parseAppOrderSection(const tinyxml2::XMLElement* root) {
-        const tinyxml2::XMLElement* appOrder = root->FirstChildElement("appOrder");
+    void parseAppOrderSection(const tinyxml2::XMLElement* node) {
+        const tinyxml2::XMLElement* appOrder = nullptr;
+        if (node && std::string(node->Value()) == "appOrder") {
+            appOrder = node;
+        } else if (node) {
+            appOrder = node->FirstChildElement("appOrder");
+        }
         if (!appOrder) return;
-        
         const tinyxml2::XMLElement* item = appOrder->FirstChildElement();
         while (item) {
             Item parsedItem = parseItem(item);
@@ -238,12 +255,7 @@ bool EXMLParser::loadFromFile(const std::string& filePath) {
         return false;
     }
     
-    const tinyxml2::XMLElement* root = doc.RootElement();
-    if (!root) {
-        std::cerr << "No root element found in XML file" << std::endl;
-        return false;
-    }
-    
+    // 兼容无根节点的情况：遍历所有顶层元素
     try {
         // 清空现有数据
         pImpl->homeItems.clear();
@@ -251,16 +263,34 @@ bool EXMLParser::loadFromFile(const std::string& filePath) {
         pImpl->homeOnlyItems.clear();
         pImpl->appOrderItems.clear();
         pImpl->hotseatHomeOnlyItems.clear();
-        
-        // 解析布局配置
-        pImpl->parseLayoutConfig(root);
-        
-        // 解析各个区域
-        pImpl->parseHomeSection(root);
-        pImpl->parseHotseatSection(root);
-        pImpl->parseHomeOnlySection(root);
-        pImpl->parseAppOrderSection(root);
-        
+
+        // 先尝试用RootElement（有根节点时）
+        const tinyxml2::XMLElement* root = doc.RootElement();
+        if (root && root->FirstChildElement()) {
+            // 如果根节点下有子节点，遍历所有子节点
+            for (const tinyxml2::XMLElement* elem = root->FirstChildElement(); elem; elem = elem->NextSiblingElement()) {
+                std::string tag = elem->Value();
+                if (tag == "home") pImpl->parseHomeSection(root);
+                else if (tag == "hotseat") pImpl->parseHotseatSection(root);
+                else if (tag == "homeOnly") pImpl->parseHomeOnlySection(root);
+                else if (tag == "appOrder") pImpl->parseAppOrderSection(root);
+            }
+            // 配置解析依然用root
+            pImpl->parseLayoutConfig(root);
+        } else {
+            // 无根节点时，遍历所有顶层元素
+            for (const tinyxml2::XMLNode* node = doc.FirstChild(); node; node = node->NextSibling()) {
+                const tinyxml2::XMLElement* elem = node->ToElement();
+                if (!elem) continue;
+                std::string tag = elem->Value();
+                if (tag == "home") pImpl->parseHomeSection(elem);
+                else if (tag == "hotseat") pImpl->parseHotseatSection(elem);
+                else if (tag == "homeOnly") pImpl->parseHomeOnlySection(elem);
+                else if (tag == "appOrder") pImpl->parseAppOrderSection(elem);
+                // 配置项只需解析一次
+                if (tag == "category") pImpl->parseLayoutConfig(elem);
+            }
+        }
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Error parsing XML: " << e.what() << std::endl;

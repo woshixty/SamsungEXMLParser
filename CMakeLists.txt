@@ -23,36 +23,18 @@ else()
         pkg_check_modules(TINYXML2 tinyxml2)
     endif()
     
-    # 如果仍然没有找到，尝试手动下载
+    # 如果仍然没有找到，使用本地的tinyxml2源码
     if(NOT TINYXML2_FOUND)
-        message(STATUS "tinyxml2 not found, attempting to download...")
-        include(FetchContent)
+        message(STATUS "tinyxml2 not found, using local tinyxml2 source...")
         
-        # 设置网络选项
-        set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
-        set(FETCHCONTENT_QUIET OFF)
-        
-        # 尝试使用URL下载
-        FetchContent_Declare(
-            tinyxml2
-            URL https://github.com/leethomason/tinyxml2/archive/refs/tags/9.0.0.tar.gz
-            URL_HASH SHA256=cc2f1417c308b1f6acc54f88eb70771a0bf65f76282ce5c40e54cfe52952702c
-        )
-        
-        FetchContent_GetProperties(tinyxml2)
-        if(NOT tinyxml2_POPULATED)
-            FetchContent_Populate(tinyxml2)
-        endif()
-        
-        if(tinyxml2_POPULATED)
+        # 检查本地tinyxml2源码是否存在
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/libs/tinyxml2/CMakeLists.txt)
+            message(STATUS "Found local tinyxml2 at libs/tinyxml2")
+            add_subdirectory(libs/tinyxml2)
             set(TINYXML2_LIBRARIES tinyxml2)
-            set(TINYXML2_INCLUDE_DIRS ${tinyxml2_SOURCE_DIR})
-            add_subdirectory(${tinyxml2_SOURCE_DIR} ${tinyxml2_BINARY_DIR})
+            set(TINYXML2_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/libs/tinyxml2)
         else()
-            message(FATAL_ERROR "Failed to download tinyxml2. Please install it manually:")
-            message(STATUS "1. vcpkg install tinyxml2")
-            message(STATUS "2. Download from https://github.com/leethomason/tinyxml2")
-            message(STATUS "3. Set TINYXML2_DIR to point to tinyxml2 installation")
+            message(FATAL_ERROR "Local tinyxml2 not found at libs/tinyxml2. Please ensure the tinyxml2 source code is available in the libs/tinyxml2 directory.")
         endif()
     endif()
 endif()
